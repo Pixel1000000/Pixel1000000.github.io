@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FLEA.SCAN — Tarkov Flip Finder</title>
+<style>
+  :root{
+    --bg: #12140f;
+    --panel: #1a1d15;
+    --panel-2: #21251a;
+    --border: #34392a;
+    --text: #e9e4d4;
+    --text-dim: #9aa085;
+    --amber: #c98a3b;
+    --amber-dim: #7a5726;
+    --olive: #6f7a5c;
+    --rust: #b1462f;
+    --green: #7a9a5d;
+    --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{min-height:100vh;}
+
+  .wrap{max-width:1400px;margin:0 auto;padding:28px 20px 60px;}
+
+  header.top{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    border-bottom:2px solid var(--border);
+    padding-bottom:16px; margin-bottom:20px; flex-wrap:wrap; gap:12px;
+  }
+  .brand{display:flex; flex-direction:column; gap:2px;}
+  .brand .mark{font-size:28px; font-weight:800; letter-spacing:-0.5px; color:var(--text);}
+  .brand .mark span{color:var(--amber);}
+  .brand .sub{color:var(--text-dim); font-size:13px; max-width:520px; line-height:1.5;}
+
+  .mode-toggle{display:flex; border:1px solid var(--border); border-radius:6px; overflow:hidden;}
+  .mode-toggle button{
+    background:var(--panel); color:var(--text-dim); border:none; padding:10px 18px;
+    font-family:var(--mono); font-size:13px; cursor:pointer; transition:background .15s,color .15s;
+  }
+  .mode-toggle button.active{background:var(--amber); color:#1a1207; font-weight:700;}
+  .mode-toggle button:disabled{cursor:not-allowed; opacity:.4;}
+
+  .controls{
+    display:grid; grid-template-columns: 1.4fr 1fr 1fr auto; gap:10px;
+    background:var(--panel); border:1px solid var(--border); border-radius:8px;
+    padding:14px; margin-bottom:10px; align-items:end;
+  }
+  .chip-panel{
+    display:flex; flex-wrap:wrap; gap:6px;
+    background:var(--panel); border:1px solid var(--border); border-radius:8px;
+    padding:12px 14px; margin-bottom:16px;
+  }
+  .chip-panel .chip-label{font-size:11px; color:var(--text-dim); width:100%; margin-bottom:2px;}
+  .chip{
+    font-family:var(--mono); font-size:11px; padding:5px 10px; border-radius:14px;
+    border:1px solid var(--border); background:var(--panel-2); color:var(--text-dim);
+    cursor:pointer; transition:all .12s; user-select:none;
+  }
+  .chip:hover{border-color:var(--olive);}
+  .chip.excluded{background:var(--rust); border-color:var(--rust); color:#fff; text-decoration:line-through; opacity:.85;}
+  .chip-actions{margin-left:auto; display:flex; gap:8px;}
+  .chip-actions button{
+    background:transparent; border:1px solid var(--border); color:var(--text-dim);
+    font-family:var(--mono); font-size:11px; padding:5px 10px; border-radius:6px; cursor:pointer;
+  }
+  .chip-actions button:hover{border-color:var(--amber); color:var(--amber);}
+  .field{display:flex; flex-direction:column; gap:5px;}
+  .field label{font-size:11px; color:var(--text-dim);}
+  .field input, .field select{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:8px 10px; border-radius:5px; font-size:13px; font-family:var(--sans);
+  }
+  .field input:focus, .field select:focus{outline:1px solid var(--amber);}
+  .check-field{display:flex; align-items:center; gap:8px; padding-bottom:8px;}
+  .check-field input{width:16px;height:16px;accent-color:var(--amber);}
+  .check-field label{font-size:12px; color:var(--text-dim);}
+
+  .status-bar{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;}
+  .status-bar .count{font-family:var(--mono); font-size:12px; color:var(--text-dim);}
+  .status-bar .warn{font-size:12px; color:var(--rust); font-family:var(--mono);}
+
+  .table-scroll{border:1px solid var(--border); border-radius:8px; overflow:auto; max-height:70vh; background:var(--panel);}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{
+    position:sticky; top:0; background:var(--panel-2); text-align:right; padding:10px 12px;
+    border-bottom:1px solid var(--border); cursor:pointer; user-select:none; white-space:nowrap;
+    font-weight:600; color:var(--text-dim); font-size:11px;
+  }
+  thead th:first-child, thead th:nth-child(2){text-align:left;}
+  thead th.sorted{color:var(--amber);}
+  thead th .arrow{margin-left:4px; opacity:.7;}
+  tbody td{padding:9px 12px; border-bottom:1px solid #262a1c; text-align:right; font-family:var(--mono); white-space:nowrap;}
+  tbody td:first-child{text-align:center; width:36px;}
+  tbody td:nth-child(2){text-align:left; font-family:var(--sans); white-space:normal; min-width:200px;}
+  tbody tr:hover{background:#20241a;}
+  tbody img{width:28px; height:28px; object-fit:contain; border-radius:3px; background:#0c0e08; vertical-align:middle;}
+  .item-name{font-weight:600; color:var(--text);}
+  .item-type{display:block; font-size:10px; color:var(--text-dim); font-family:var(--mono); margin-top:1px;}
+  .pos{color:var(--green);}
+  .neg{color:var(--rust);}
+  .spread-cell{color:var(--amber); font-weight:700;}
+
+  .empty, .loading, .error{padding:60px 20px; text-align:center; color:var(--text-dim); font-family:var(--mono); font-size:13px;}
+  .error{color:var(--rust);}
+
+  footer.note{margin-top:16px; font-size:12px; color:var(--text-dim); line-height:1.6; border-top:1px solid var(--border); padding-top:14px;}
+  footer.note b{color:var(--text);}
+
+  @media (max-width: 860px){
+    .controls{grid-template-columns:1fr 1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark">FLEA<span>.</span>SCAN</div>
+      <div class="sub">Поиск товаров с широким спредом между минимальной и средней ценой флея — кандидаты на скупку и перепродажу лотом. Данные: api.tarkov.dev (24ч агрегаты, не живой стакан).</div>
+    </div>
+    <div class="mode-toggle" id="modeToggle">
+      <button data-mode="pvp" class="active">PVP</button>
+      <button data-mode="pve">PVE</button>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="field">
+      <label>Поиск по названию</label>
+      <input type="text" id="searchInput" placeholder="напр. Salewa, SICC, тушёнка">
+    </div>
+    <div class="field">
+      <label>Мин. средняя цена (₽)</label>
+      <input type="number" id="minPriceInput" value="0" min="0" step="1000">
+    </div>
+    <div class="field">
+      <label>Мин. спред (₽)</label>
+      <input type="number" id="minSpreadInput" value="0" min="0" step="1000">
+    </div>
+    <div class="check-field">
+      <input type="checkbox" id="excludeNoFlea" checked>
+      <label for="excludeNoFlea">Скрыть предметы без флея</label>
+    </div>
+  </div>
+
+  <div class="chip-panel">
+    <span class="chip-label">Исключить категории (клик — включить/выключить):</span>
+    <span id="chipContainer" style="display:contents;"></span>
+    <span class="chip-actions">
+      <button id="chipClearBtn" type="button">Сбросить исключения</button>
+    </span>
+  </div>
+
+  <div class="status-bar">
+    <div class="count" id="countLabel">—</div>
+    <div class="warn" id="warnLabel"></div>
+  </div>
+
+  <div class="table-scroll">
+    <table id="dataTable" style="display:none;">
+      <thead>
+        <tr>
+          <th></th>
+          <th data-key="name">Предмет</th>
+          <th data-key="low24hPrice">Low 24h</th>
+          <th data-key="avg24hPrice">Avg 24h</th>
+          <th data-key="high24hPrice">High 24h</th>
+          <th data-key="spreadAbs">Спред ₽</th>
+          <th data-key="spreadPct">Спред %</th>
+          <th data-key="changeLast48hPercent">48ч Δ</th>
+          <th data-key="perSlot">₽/слот</th>
+          <th data-key="bestTrader">Трейдер (buyback)</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="loading" id="loadingMsg">Загружаю данные с api.tarkov.dev…</div>
+    <div class="error" id="errorMsg" style="display:none;"></div>
+    <div class="empty" id="emptyMsg" style="display:none;">Ничего не найдено под текущие фильтры.</div>
+  </div>
+
+  <footer class="note">
+    <b>Как читать таблицу:</b> «Спред ₽» = Avg24h − Low24h — грубая оценка потенциальной маржи схемы «скупить по low, продать лотом по avg−1». <b>Важно:</b> это агрегированные данные за 24ч, а не текущий стакан лотов — перед реальной закупкой всегда проверяйте живую глубину предложений в самой игре. Широкий спред при малом объёме сделок = ловушка, а не возможность.
+  </footer>
+
+</div>
+
+<script>
+const API_URL = "https://api.tarkov.dev/graphql";
+let gameMode = "pvp";
+let pveSupported = true;
+let allItems = [];
+let sortKey = "spreadAbs";
+let sortDir = "desc";
+let excludedTypes = new Set(["meds", "keys"]); // дефолт по вашему запросу — можно менять кликом по чипам
+let knownTypes = new Set();
+
+const els = {
+  table: document.getElementById('dataTable'),
+  tbody: document.getElementById('tableBody'),
+  loading: document.getElementById('loadingMsg'),
+  error: document.getElementById('errorMsg'),
+  empty: document.getElementById('emptyMsg'),
+  count: document.getElementById('countLabel'),
+  warn: document.getElementById('warnLabel'),
+  search: document.getElementById('searchInput'),
+  chipContainer: document.getElementById('chipContainer'),
+  chipClearBtn: document.getElementById('chipClearBtn'),
+  minPrice: document.getElementById('minPriceInput'),
+  minSpread: document.getElementById('minSpreadInput'),
+  excludeNoFlea: document.getElementById('excludeNoFlea'),
+  modeToggle: document.getElementById('modeToggle'),
+};
+
+const QUERY_WITH_MODE = `
+query TarkovItems($gameMode: GameMode) {
+  items(gameMode: $gameMode) {
+    id name shortName basePrice avg24hPrice low24hPrice high24hPrice
+    changeLast48hPercent width height iconLink types
+    sellFor { price currency vendor { name } }
+  }
+}`;
+
+const QUERY_NO_MODE = `
+query TarkovItems {
+  items {
+    id name shortName basePrice avg24hPrice low24hPrice high24hPrice
+    changeLast48hPercent width height iconLink types
+    sellFor { price currency vendor { name } }
+  }
+}`;
+
+async function gqlFetch(query, variables){
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables })
+  });
+  const json = await res.json();
+  return json;
+}
+
+async function loadData(){
+  els.loading.style.display = "block";
+  els.error.style.display = "none";
+  els.table.style.display = "none";
+  els.empty.style.display = "none";
+
+  try{
+    let json = await gqlFetch(QUERY_WITH_MODE, { gameMode });
+
+    if (json.errors && json.errors.length){
+      // Параметр gameMode не поддерживается схемой — откатываемся на запрос без него.
+      pveSupported = false;
+      updateModeUI();
+      json = await gqlFetch(QUERY_NO_MODE, {});
+      if (json.errors && json.errors.length){
+        throw new Error(json.errors.map(e => e.message).join("; "));
+      }
+      els.warn.textContent = "API не поддержало параметр режима — показаны данные по умолчанию (обычно PVP).";
+    } else {
+      els.warn.textContent = "";
+    }
+
+    const items = (json.data && json.data.items) ? json.data.items : [];
+    allItems = items.map(it => {
+      const low = it.low24hPrice || 0;
+      const avg = it.avg24hPrice || 0;
+      const high = it.high24hPrice || 0;
+      const spreadAbs = (low > 0 && avg > 0) ? (avg - low) : 0;
+      const spreadPct = (low > 0 && avg > 0) ? ((avg - low) / low * 100) : 0;
+      const slots = (it.width || 1) * (it.height || 1);
+      const perSlot = avg > 0 ? Math.round(avg / slots) : 0;
+      let bestTrader = null;
+      if (it.sellFor && it.sellFor.length){
+        const rubTrader = it.sellFor
+          .filter(s => s.vendor && s.vendor.name !== "Flea Market")
+          .sort((a,b) => b.price - a.price)[0];
+        bestTrader = rubTrader || null;
+      }
+      return {
+        id: it.id,
+        name: it.name,
+        icon: it.iconLink,
+        types: it.types || [],
+        low24hPrice: low,
+        avg24hPrice: avg,
+        high24hPrice: high,
+        changeLast48hPercent: it.changeLast48hPercent || 0,
+        spreadAbs, spreadPct, perSlot, bestTrader
+      };
+    });
+
+    populateTypeChips(allItems);
+    render();
+  } catch(err){
+    els.loading.style.display = "none";
+    els.error.style.display = "block";
+    els.error.textContent = "Не удалось загрузить данные: " + err.message + ". Проверьте соединение или повторите позже.";
+  }
+}
+
+function populateTypeChips(items){
+  const types = new Set();
+  items.forEach(it => it.types.forEach(t => types.add(t)));
+  // Не создаём чипы заново, если список категорий не изменился (первая загрузка обычно).
+  if (types.size === knownTypes.size && Array.from(types).every(t => knownTypes.has(t))) return;
+  knownTypes = types;
+
+  els.chipContainer.innerHTML = Array.from(types).sort().map(t =>
+    `<button type="button" class="chip${excludedTypes.has(t) ? ' excluded' : ''}" data-type="${t}">${t}</button>`
+  ).join("");
+
+  els.chipContainer.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const t = chip.dataset.type;
+      if (excludedTypes.has(t)) excludedTypes.delete(t); else excludedTypes.add(t);
+      chip.classList.toggle('excluded');
+      render();
+    });
+  });
+}
+
+function fmt(n){
+  if (!n && n !== 0) return "—";
+  return Math.round(n).toLocaleString("ru-RU");
+}
+
+function applyFiltersAndSort(){
+  const q = els.search.value.trim().toLowerCase();
+  const minPrice = Number(els.minPrice.value) || 0;
+  const minSpread = Number(els.minSpread.value) || 0;
+  const noFlea = els.excludeNoFlea.checked;
+
+  let rows = allItems.filter(it => {
+    if (noFlea && (it.avg24hPrice === 0 || it.low24hPrice === 0)) return false;
+    if (it.types.some(t => excludedTypes.has(t))) return false;
+    if (q && !it.name.toLowerCase().includes(q)) return false;
+    if (it.avg24hPrice < minPrice) return false;
+    if (it.spreadAbs < minSpread) return false;
+    return true;
+  });
+
+  rows.sort((a,b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    if (va < vb) return sortDir === "asc" ? -1 : 1;
+    if (va > vb) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  return rows;
+}
+
+function render(){
+  const rows = applyFiltersAndSort();
+  els.loading.style.display = "none";
+
+  if (!rows.length){
+    els.table.style.display = "none";
+    els.empty.style.display = "block";
+    els.count.textContent = "0 предметов";
+    return;
+  }
+  els.empty.style.display = "none";
+  els.table.style.display = "table";
+  els.count.textContent = `${rows.length} предметов · режим ${gameMode.toUpperCase()}`;
+
+  els.tbody.innerHTML = rows.slice(0, 300).map(it => {
+    const changeClass = it.changeLast48hPercent > 0 ? "pos" : (it.changeLast48hPercent < 0 ? "neg" : "");
+    const traderStr = it.bestTrader ? `${it.bestTrader.vendor.name} · ${fmt(it.bestTrader.price)}₽` : "—";
+    return `<tr>
+      <td>${it.icon ? `<img src="${it.icon}" loading="lazy" alt="">` : ""}</td>
+      <td><span class="item-name">${escapeHtml(it.name)}</span><span class="item-type">${it.types.slice(0,3).join(" · ")}</span></td>
+      <td>${fmt(it.low24hPrice)}</td>
+      <td>${fmt(it.avg24hPrice)}</td>
+      <td>${fmt(it.high24hPrice)}</td>
+      <td class="spread-cell">${fmt(it.spreadAbs)}</td>
+      <td class="spread-cell">${it.spreadPct.toFixed(1)}%</td>
+      <td class="${changeClass}">${it.changeLast48hPercent > 0 ? "+" : ""}${it.changeLast48hPercent.toFixed(1)}%</td>
+      <td>${fmt(it.perSlot)}</td>
+      <td>${traderStr}</td>
+    </tr>`;
+  }).join("");
+
+  if (rows.length > 300){
+    els.tbody.innerHTML += `<tr><td colspan="10" style="text-align:center; color:var(--text-dim); font-family:var(--sans);">Показаны первые 300 из ${rows.length} — сузьте фильтры для полного просмотра.</td></tr>`;
+  }
+
+  updateSortHeaders();
+}
+
+function updateSortHeaders(){
+  document.querySelectorAll('#dataTable thead th[data-key]').forEach(th => {
+    th.classList.toggle('sorted', th.dataset.key === sortKey);
+    const base = th.textContent.replace(/ ?[▲▼]$/, "");
+    th.textContent = base + (th.dataset.key === sortKey ? (sortDir === "asc" ? " ▲" : " ▼") : "");
+  });
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function updateModeUI(){
+  document.querySelectorAll('#modeToggle button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === gameMode);
+    if (btn.dataset.mode === "pve") btn.disabled = !pveSupported;
+  });
+}
+
+document.querySelectorAll('#modeToggle button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.disabled) return;
+    gameMode = btn.dataset.mode;
+    updateModeUI();
+    loadData();
+  });
+});
+
+document.querySelectorAll('#dataTable thead th[data-key]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (sortKey === key){
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortKey = key;
+      sortDir = "desc";
+    }
+    render();
+  });
+});
+
+[els.search, els.minPrice, els.minSpread, els.excludeNoFlea].forEach(el => {
+  el.addEventListener('input', render);
+});
+
+els.chipClearBtn.addEventListener('click', () => {
+  excludedTypes.clear();
+  els.chipContainer.querySelectorAll('.chip.excluded').forEach(c => c.classList.remove('excluded'));
+  render();
+});
+
+loadData();
+</script>
+</body>
+</html>
