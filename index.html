@@ -236,7 +236,7 @@
 </div>
 
 <script>
-const API_URL = "https://tarkov-proxy.jack-su-cs-go.workers.dev"; // ← замените на URL своего Cloudflare Worker (см. tarkov-proxy-worker.js)
+const API_URL = "https://ВАШ-WORKER.ВАШ-ЛОГИН.workers.dev"; // ← замените на URL своего Cloudflare Worker (см. tarkov-proxy-worker.js)
 let gameMode = "pvp";
 let pveSupported = true;
 let allItems = [];
@@ -286,13 +286,15 @@ query TarkovItems {
 async function gqlFetch(query, variables){
   // GET не требует CORS-preflight (в отличие от POST + application/json),
   // поэтому надёжнее работает через мобильных операторов/прозрачные прокси.
+  // Важно: не бросаем исключение на не-200 статус — GraphQL-сервер может
+  // вернуть 422/400 вместе с телом { errors: [...] }, и этот errors-массив
+  // разбирает уже вызывающий код (там же лежит логика отката с gameMode).
   const params = new URLSearchParams({
     query: query,
     variables: JSON.stringify(variables || {})
   });
   try{
     const res = await fetch(`${API_URL}?${params.toString()}`, { method: "GET" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch(getErr){
     try{
@@ -301,7 +303,6 @@ async function gqlFetch(query, variables){
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, variables })
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch(postErr){
       throw new Error(`GET: ${getErr.message} · POST: ${postErr.message}`);
