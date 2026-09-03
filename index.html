@@ -110,8 +110,39 @@
   footer.note{margin-top:16px; font-size:12px; color:var(--text-dim); line-height:1.6; border-top:1px solid var(--border); padding-top:14px;}
   footer.note b{color:var(--text);}
 
+  .mobile-sort{display:none; gap:8px; margin-bottom:12px;}
+  .mobile-sort select{
+    flex:1; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:9px 10px; border-radius:6px; font-size:13px; font-family:var(--sans);
+  }
+  .mobile-sort button{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text-dim);
+    padding:9px 14px; border-radius:6px; font-family:var(--mono); font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+
+  .card-list{display:none; flex-direction:column; gap:10px; padding:4px;}
+  .item-card{background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:12px;}
+  .item-card .card-head{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .item-card .card-head img{width:34px; height:34px; object-fit:contain; border-radius:4px; background:#0c0e08; flex-shrink:0;}
+  .item-card .card-title{font-weight:600; color:var(--text); font-size:14px; line-height:1.3;}
+  .item-card .card-type{font-size:10px; color:var(--text-dim); font-family:var(--mono); margin-top:2px;}
+  .card-stats{display:grid; grid-template-columns:repeat(3, 1fr); gap:10px 6px;}
+  .card-stat .label{font-size:10px; color:var(--text-dim); margin-bottom:2px;}
+  .card-stat .value{font-family:var(--mono); font-size:13px; color:var(--text);}
+  .card-stat.spread .value{color:var(--amber); font-weight:700;}
+  .card-trader{margin-top:10px; padding-top:10px; border-top:1px solid var(--border); font-size:11px; color:var(--text-dim); font-family:var(--mono);}
+
   @media (max-width: 860px){
     .controls{grid-template-columns:1fr 1fr;}
+  }
+
+  @media (max-width: 640px){
+    .wrap{padding:16px 12px 40px;}
+    header.top{align-items:flex-start;}
+    .brand .mark{font-size:22px;}
+    .mode-toggle button{padding:8px 14px; font-size:12px;}
+    .mobile-sort{display:flex;}
+    .table-scroll{max-height:none; border:none; background:transparent;}
   }
 </style>
 </head>
@@ -161,6 +192,19 @@
     <div class="warn" id="warnLabel"></div>
   </div>
 
+  <div class="mobile-sort">
+    <select id="mobileSortSelect">
+      <option value="spreadAbs">Сортировать: Спред ₽</option>
+      <option value="spreadPct">Спред %</option>
+      <option value="avg24hPrice">Средняя цена</option>
+      <option value="low24hPrice">Мин. цена</option>
+      <option value="changeLast48hPercent">48ч изменение</option>
+      <option value="perSlot">₽ за слот</option>
+      <option value="name">Название</option>
+    </select>
+    <button id="mobileSortDirBtn" type="button">▼ убыв.</button>
+  </div>
+
   <div class="table-scroll">
     <table id="dataTable" style="display:none;">
       <thead>
@@ -179,6 +223,7 @@
       </thead>
       <tbody id="tableBody"></tbody>
     </table>
+    <div class="card-list" id="cardList"></div>
     <div class="loading" id="loadingMsg">Загружаю данные с api.tarkov.dev…</div>
     <div class="error" id="errorMsg" style="display:none;"></div>
     <div class="empty" id="emptyMsg" style="display:none;">Ничего не найдено под текущие фильтры.</div>
@@ -211,6 +256,9 @@ const els = {
   search: document.getElementById('searchInput'),
   chipContainer: document.getElementById('chipContainer'),
   chipClearBtn: document.getElementById('chipClearBtn'),
+  cardList: document.getElementById('cardList'),
+  mobileSortSelect: document.getElementById('mobileSortSelect'),
+  mobileSortDirBtn: document.getElementById('mobileSortDirBtn'),
   minPrice: document.getElementById('minPriceInput'),
   minSpread: document.getElementById('minSpreadInput'),
   excludeNoFlea: document.getElementById('excludeNoFlea'),
@@ -356,20 +404,38 @@ function applyFiltersAndSort(){
   return rows;
 }
 
+function isMobile(){
+  return window.matchMedia('(max-width: 640px)').matches;
+}
+
 function render(){
   const rows = applyFiltersAndSort();
   els.loading.style.display = "none";
+  const mobile = isMobile();
 
   if (!rows.length){
     els.table.style.display = "none";
+    els.cardList.style.display = "none";
     els.empty.style.display = "block";
     els.count.textContent = "0 предметов";
     return;
   }
   els.empty.style.display = "none";
-  els.table.style.display = "table";
   els.count.textContent = `${rows.length} предметов · режим ${gameMode.toUpperCase()}`;
 
+  if (mobile){
+    els.table.style.display = "none";
+    els.cardList.style.display = "flex";
+    renderCards(rows);
+  } else {
+    els.cardList.style.display = "none";
+    els.table.style.display = "table";
+    renderTable(rows);
+    updateSortHeaders();
+  }
+}
+
+function renderTable(rows){
   els.tbody.innerHTML = rows.slice(0, 300).map(it => {
     const changeClass = it.changeLast48hPercent > 0 ? "pos" : (it.changeLast48hPercent < 0 ? "neg" : "");
     const traderStr = it.bestTrader ? `${it.bestTrader.vendor.name} · ${fmt(it.bestTrader.price)}₽` : "—";
@@ -390,8 +456,36 @@ function render(){
   if (rows.length > 300){
     els.tbody.innerHTML += `<tr><td colspan="10" style="text-align:center; color:var(--text-dim); font-family:var(--sans);">Показаны первые 300 из ${rows.length} — сузьте фильтры для полного просмотра.</td></tr>`;
   }
+}
 
-  updateSortHeaders();
+function renderCards(rows){
+  const shown = rows.slice(0, 150);
+  els.cardList.innerHTML = shown.map(it => {
+    const changeClass = it.changeLast48hPercent > 0 ? "pos" : (it.changeLast48hPercent < 0 ? "neg" : "");
+    const traderStr = it.bestTrader ? `${it.bestTrader.vendor.name} — ${fmt(it.bestTrader.price)}₽` : "нет данных по трейдеру";
+    return `<div class="item-card">
+      <div class="card-head">
+        ${it.icon ? `<img src="${it.icon}" loading="lazy" alt="">` : ""}
+        <div>
+          <div class="card-title">${escapeHtml(it.name)}</div>
+          <div class="card-type">${it.types.slice(0,3).join(" · ")}</div>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="card-stat"><div class="label">Low 24h</div><div class="value">${fmt(it.low24hPrice)}₽</div></div>
+        <div class="card-stat"><div class="label">Avg 24h</div><div class="value">${fmt(it.avg24hPrice)}₽</div></div>
+        <div class="card-stat"><div class="label">High 24h</div><div class="value">${fmt(it.high24hPrice)}₽</div></div>
+        <div class="card-stat spread"><div class="label">Спред ₽</div><div class="value">${fmt(it.spreadAbs)}</div></div>
+        <div class="card-stat spread"><div class="label">Спред %</div><div class="value">${it.spreadPct.toFixed(1)}%</div></div>
+        <div class="card-stat"><div class="label">48ч Δ</div><div class="value ${changeClass}">${it.changeLast48hPercent > 0 ? "+" : ""}${it.changeLast48hPercent.toFixed(1)}%</div></div>
+      </div>
+      <div class="card-trader">Трейдер: ${traderStr} · ${fmt(it.perSlot)}₽/слот</div>
+    </div>`;
+  }).join("");
+
+  if (rows.length > 150){
+    els.cardList.innerHTML += `<div style="text-align:center; color:var(--text-dim); font-family:var(--sans); font-size:12px; padding:10px;">Показаны первые 150 из ${rows.length} — сузьте фильтры для полного просмотра.</div>`;
+  }
 }
 
 function updateSortHeaders(){
@@ -445,6 +539,29 @@ els.chipClearBtn.addEventListener('click', () => {
   excludedTypes.clear();
   els.chipContainer.querySelectorAll('.chip.excluded').forEach(c => c.classList.remove('excluded'));
   render();
+});
+
+els.mobileSortSelect.value = sortKey;
+els.mobileSortSelect.addEventListener('change', () => {
+  sortKey = els.mobileSortSelect.value;
+  render();
+});
+
+els.mobileSortDirBtn.addEventListener('click', () => {
+  sortDir = sortDir === "asc" ? "desc" : "asc";
+  updateMobileSortDirBtn();
+  render();
+});
+
+function updateMobileSortDirBtn(){
+  els.mobileSortDirBtn.textContent = sortDir === "asc" ? "▲ возр." : "▼ убыв.";
+}
+updateMobileSortDirBtn();
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(render, 150);
 });
 
 loadData();
